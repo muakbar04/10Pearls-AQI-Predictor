@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+import pytz
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import hopsworks
@@ -126,9 +127,38 @@ if fs and mr:
     if df_raw is not None and model is not None:
         # Preprocess Data (Add Physics Features)
         df = add_physics_features(df_raw)
+
+        # --- STEP 1: LOGIC (Filter in UTC) ---
+        # We do the math in UTC to safely handle the "Future Data" bug
+        now_utc = datetime.now(pytz.utc)
+
+        # Ensure timestamp is UTC-aware
+        if df['timestamp'].dt.tz is None:
+            df['timestamp'] = df['timestamp'].dt.tz_localize('UTC')
+        else:
+            df['timestamp'] = df['timestamp'].dt.tz_convert('UTC')
+
+        # Filter: Keep only past/present rows
+        past_df = df[df['timestamp'] <= now_utc]
+
+        # --- STEP 2: DISPLAY (Convert to Karachi Time) ---
+        # This fixes the "8:06 AM" vs "1:06 PM" issue
+        pk_tz = pytz.timezone('Asia/Karachi')
         
-        latest = df.iloc[-1]
-        prev = df.iloc[-2]
+        # Convert the main dataframe
+        df['timestamp'] = df['timestamp'].dt.tz_convert(pk_tz)
+        
+        # Convert the filtered dataframe (make a copy to be safe)
+        if not past_df.empty:
+            past_df = past_df.copy()
+            past_df['timestamp'] = past_df['timestamp'].dt.tz_convert(pk_tz)
+            
+            latest = past_df.iloc[-1]
+            prev = past_df.iloc[-2] if len(past_df) > 1 else latest
+        else:
+            # Fallback (rare)
+            latest = df.iloc[-1]
+            prev = df.iloc[-2]
 
         # --- TOP ROW: METRICS ---
         col1, col2, col3, col4 = st.columns(4)
@@ -148,9 +178,9 @@ if fs and mr:
         tab1, tab2 = st.tabs(["📈 History", "🤖 72h Forecast"])
 
         with tab1:
-            # Plot last 7 days from the raw data
-            fig = px.line(df.tail(168), x='timestamp', y=['pm25', 'aqi_pm25'], 
-                          title="Last 7 Days History", template="plotly_dark")
+            # Plot last 7 days (now in Karachi Time) using FILTERED data
+            fig = px.line(past_df.tail(168), x='timestamp', y=['pm25', 'aqi_pm25'], 
+                          title="Last 7 Days History (Karachi Time)", template="plotly_dark")
             st.plotly_chart(fig, use_container_width=True)
 
         with tab2:
@@ -158,13 +188,14 @@ if fs and mr:
             input_width = meta.get('input_width', 24)
             feature_cols = meta.get('feature_cols', [])
             
-            if len(df) < input_width:
+            # CHANGE 1: Use 'past_df' instead of 'df' to prevent looking into the future
+            if len(past_df) < input_width:
                 st.error(f"Need at least {input_width} hours of data history.")
             else:
-                # 1. Prepare Input Vector (Last 24 hours flattened)
-                input_df = df.iloc[-input_width:]
+                # 1. Prepare Input Vector
+                # We take the LAST 24 valid hours (ending now)
+                input_df = past_df.iloc[-input_width:]
                 
-                # Verify we have the right columns
                 try:
                     X_input = input_df[feature_cols].values.flatten().reshape(1, -1)
                     
@@ -172,31 +203,33 @@ if fs and mr:
                     X_scaled = scaler.transform(X_input)
                     pred_vector = model.predict(X_scaled)
                     
-                    # 3. Handle Output
                     if pred_vector.ndim > 1: pred_vector = pred_vector[0]
                     
-                    # 4. Create Future Timeline
+                    # 3. Create Future Timeline
                     future_dates = [latest['timestamp'] + timedelta(hours=i+1) for i in range(len(pred_vector))]
                     
-                    # 5. Plot
+                    # 4. Plot
                     fig_fc = go.Figure()
-                    # Past context (48h)
-                    past = df.tail(48)
+                    
+                    # CHANGE 2: Plot 'past_df' (clean history) instead of 'df' (dirty history)
+                    past = past_df.tail(48)
                     fig_fc.add_trace(go.Scatter(x=past['timestamp'], y=past['aqi_pm25'], name="Past", line=dict(color='cyan')))
+                    
                     # Future Forecast
                     x_fc = [past['timestamp'].iloc[-1]] + future_dates
                     y_fc = [past['aqi_pm25'].iloc[-1]] + list(pred_vector)
                     
                     fig_fc.add_trace(go.Scatter(x=x_fc, y=y_fc, name="Forecast", line=dict(dash='dash', color='orange', width=3)))
                     
-                    fig_fc.update_layout(title="AI Forecast Trajectory", template="plotly_dark", hovermode="x unified")
+                    fig_fc.update_layout(title="AI Forecast Trajectory (Karachi Time)", template="plotly_dark", hovermode="x unified")
                     st.plotly_chart(fig_fc, use_container_width=True)
                     
                     peak_aqi = max(pred_vector)
-                    st.info(f"Forecast Peak: **{int(peak_aqi)} AQI** on {future_dates[np.argmax(pred_vector)].strftime('%A %H:%M')}")
+                    peak_date = future_dates[np.argmax(pred_vector)]
+                    st.info(f"Forecast Peak: **{int(peak_aqi)} AQI** on {peak_date.strftime('%A %H:%M')}")
                     
                 except KeyError as e:
-                    st.error(f"Feature Mismatch! The model expects features that are missing from data: {e}")
+                    st.error(f"Feature Mismatch! {e}")
                     st.write("Available columns:", df.columns.tolist())
 
         # Sidebar Meta
