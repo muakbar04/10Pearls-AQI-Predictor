@@ -128,37 +128,37 @@ if fs and mr:
         # Preprocess Data (Add Physics Features)
         df = add_physics_features(df_raw)
 
-        # --- FIX: Filter for "Current" time (ignore future backfilled rows) ---
-        # 1. Get current time in UTC
+        # --- STEP 1: LOGIC (Filter in UTC) ---
+        # We do the math in UTC to safely handle the "Future Data" bug
         now_utc = datetime.now(pytz.utc)
 
-        # 2. Ensure DataFrame timestamp is UTC-aware
+        # Ensure timestamp is UTC-aware
         if df['timestamp'].dt.tz is None:
             df['timestamp'] = df['timestamp'].dt.tz_localize('UTC')
         else:
             df['timestamp'] = df['timestamp'].dt.tz_convert('UTC')
 
-        # 3. Filter: Keep only rows that are <= Current UTC Time
+        # Filter: Keep only past/present rows
         past_df = df[df['timestamp'] <= now_utc]
 
-        # --- DISPLAY LOGIC (Convert to Karachi Time) ---
+        # --- STEP 2: DISPLAY (Convert to Karachi Time) ---
+        # This fixes the "8:06 AM" vs "1:06 PM" issue
         pk_tz = pytz.timezone('Asia/Karachi')
         
-        # Convert full dataframe (for raw view)
+        # Convert the main dataframe
         df['timestamp'] = df['timestamp'].dt.tz_convert(pk_tz)
-
+        
+        # Convert the filtered dataframe (make a copy to be safe)
         if not past_df.empty:
-            # Create a copy for display usage
-            past_df_display = past_df.copy()
-            past_df_display['timestamp'] = past_df_display['timestamp'].dt.tz_convert(pk_tz)
+            past_df = past_df.copy()
+            past_df['timestamp'] = past_df['timestamp'].dt.tz_convert(pk_tz)
             
-            latest = past_df_display.iloc[-1]
-            prev = past_df_display.iloc[-2] if len(past_df_display) > 1 else latest
+            latest = past_df.iloc[-1]
+            prev = past_df.iloc[-2] if len(past_df) > 1 else latest
         else:
-            # Fallback if filter fails (shows latest available)
+            # Fallback (rare)
             latest = df.iloc[-1]
             prev = df.iloc[-2]
-            past_df_display = df # Fallback for charts
 
         # --- TOP ROW: METRICS ---
         col1, col2, col3, col4 = st.columns(4)
@@ -178,8 +178,8 @@ if fs and mr:
         tab1, tab2 = st.tabs(["📈 History", "🤖 72h Forecast"])
 
         with tab1:
-            # Plot last 7 days using the CLEANED display dataframe
-            fig = px.line(past_df_display.tail(168), x='timestamp', y=['pm25', 'aqi_pm25'], 
+            # Plot last 7 days (now in Karachi Time) using FILTERED data
+            fig = px.line(past_df.tail(168), x='timestamp', y=['pm25', 'aqi_pm25'], 
                           title="Last 7 Days History (Karachi Time)", template="plotly_dark")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -188,12 +188,12 @@ if fs and mr:
             input_width = meta.get('input_width', 24)
             feature_cols = meta.get('feature_cols', [])
             
-            # Use the filtered 'past_df' (UTC) for creating the input vector
-            # This ensures we don't accidentally peek at future rows in the raw df
+            # CHANGE 1: Use 'past_df' instead of 'df' to prevent looking into the future
             if len(past_df) < input_width:
                 st.error(f"Need at least {input_width} hours of data history.")
             else:
-                # 1. Prepare Input Vector (Last 24 hours from valid past data)
+                # 1. Prepare Input Vector
+                # We take the LAST 24 valid hours (ending now)
                 input_df = past_df.iloc[-input_width:]
                 
                 try:
@@ -205,14 +205,14 @@ if fs and mr:
                     
                     if pred_vector.ndim > 1: pred_vector = pred_vector[0]
                     
-                    # 3. Create Future Timeline (Starting from latest display timestamp)
+                    # 3. Create Future Timeline
                     future_dates = [latest['timestamp'] + timedelta(hours=i+1) for i in range(len(pred_vector))]
                     
                     # 4. Plot
                     fig_fc = go.Figure()
                     
-                    # Past context (48h) from display DF
-                    past = past_df_display.tail(48)
+                    # CHANGE 2: Plot 'past_df' (clean history) instead of 'df' (dirty history)
+                    past = past_df.tail(48)
                     fig_fc.add_trace(go.Scatter(x=past['timestamp'], y=past['aqi_pm25'], name="Past", line=dict(color='cyan')))
                     
                     # Future Forecast
@@ -229,7 +229,7 @@ if fs and mr:
                     st.info(f"Forecast Peak: **{int(peak_aqi)} AQI** on {peak_date.strftime('%A %H:%M')}")
                     
                 except KeyError as e:
-                    st.error(f"Feature Mismatch! The model expects features that are missing from data: {e}")
+                    st.error(f"Feature Mismatch! {e}")
                     st.write("Available columns:", df.columns.tolist())
 
         # Sidebar Meta
@@ -248,6 +248,8 @@ if fs and mr:
 st.sidebar.markdown("---")
 if st.sidebar.button("🔄 Refresh Data"):
     st.toast("Fetching new data from source...")
+    # In a real deployed app, this button would trigger a GitHub Action via API.
+    # For local serverless dev, we run the script.
     import subprocess
     subprocess.run("python fetch_features.py", shell=True) 
     st.cache_data.clear()
