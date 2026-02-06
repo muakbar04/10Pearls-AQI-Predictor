@@ -1,0 +1,23 @@
+name: Daily Training Pipeline
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Every day at Midnight UTC
+  workflow_dispatch:
+
+jobs:
+  retrain-model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - run: pip install -r requirements.txt
+      
+      - name: Run Training Script
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        # This will fetch the latest data from Hopsworks, train a new model, 
+        # and upload Version N+1 to the registry automatically.
+        run: python train_model.py --horizon 72

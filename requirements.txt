@@ -1,0 +1,13 @@
+
+pandas
+numpy
+scikit-learn
+joblib
+tensorflow
+streamlit
+shap
+matplotlib
+xgboost
+plotly
+hopsworks==4.2.10
+confluent-kafka
