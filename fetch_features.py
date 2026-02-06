@@ -110,9 +110,13 @@ def fetch_live_open_meteo():
 
         w_curr = w_data['current']
         aq_curr = aq_data['current']
+        
+        # --- FIX: Snap to top of the hour ---
+        now = datetime.now()
+        clean_timestamp = now.replace(minute=0, second=0, microsecond=0)
 
         return {
-            'timestamp': datetime.now(),
+            'timestamp': clean_timestamp,
             # Weather
             'temp': w_curr.get('temperature_2m'),
             'humidity': w_curr.get('relative_humidity_2m'),
@@ -181,7 +185,7 @@ def push_to_hopsworks(df):
 
     # 3. Insert Data
     print(f"Uploading {len(df)} rows to Feature Store...")
-    # 'wait_for_job=True' is CRITICAL for preventing connection timeouts on local wifi
+    # 'wait_for_job=True' is CRITICAL for preventing connection timeouts
     aqi_fg.insert(df, write_options={"wait_for_job" : True})
     print("✅ Upload successful!")
 
@@ -190,7 +194,7 @@ def main():
     parser.add_argument('--city', default='Karachi')
     parser.add_argument('--start', help='YYYY-MM-DD')
     parser.add_argument('--end', help='YYYY-MM-DD')
-    parser.add_argument('--api_keys', default='{}') # Kept for backward compat, though unused now
+    parser.add_argument('--api_keys', default='{}')
     args = parser.parse_args()
     
     df = pd.DataFrame()
@@ -217,16 +221,16 @@ def main():
 
     # 3. PUSH TO HOPSWORKS
     if not df.empty:
-        # --- FIX: Surgical Type Alignment (Crucial for Hopsworks Schema) ---
+        # --- FIX: Surgical Type Alignment ---
         
         # 1. Decimals (Double/Float64)
         float_cols = ['temp', 'pm25', 'pm10', 'no2', 'o3', 'wind_speed', 
                       'pm25_change', 'aqi_change_rate', 'pm25_3h_mean', 'pm25_24h_mean']
         
-        # 2. 64-bit Integers (BigInt) - Humidity
+        # 2. 64-bit Integers (BigInt)
         bigint_cols = ['humidity']
 
-        # 3. 32-bit Integers (Int) - Time features
+        # 3. 32-bit Integers (Int)
         int_cols = ['year', 'month', 'day', 'hour', 'weekday']
 
         for col in float_cols:
