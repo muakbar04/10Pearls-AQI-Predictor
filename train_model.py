@@ -13,7 +13,6 @@ import tempfile
 import joblib
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 import hopsworks
 
 from sklearn.ensemble import RandomForestRegressor
@@ -21,17 +20,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.multioutput import MultiOutputRegressor 
 from xgboost import XGBRegressor
-from tensorflow import keras
-from tensorflow.keras import layers
 from hsml.schema import Schema
 from hsml.model_schema import ModelSchema
-
-# --- CUSTOM LOSS FUNCTION ---
-def weighted_mse(y_true, y_pred):
-    horizon = tf.cast(tf.shape(y_true)[1], tf.float32)
-    weights = tf.linspace(2.0, 1.0, tf.cast(horizon, tf.int32))
-    weights = tf.reshape(weights, (1, -1))
-    return tf.reduce_mean(weights * tf.square(y_true - y_pred))
 
 # --- FEATURE ENGINEERING ---
 def add_physics_features(df):
