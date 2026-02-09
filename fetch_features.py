@@ -182,7 +182,7 @@ def push_to_hopsworks(df):
     # 3. Insert Data
     print(f"Uploading {len(df)} rows to Feature Store...")
     # 'wait_for_job=True' is CRITICAL for preventing connection timeouts on local wifi
-    aqi_fg.insert(df, write_options={"wait_for_job" : False})
+    aqi_fg.insert(df, write_options={"wait_for_job" : True})
     print("✅ Upload successful!")
 
 def main():
