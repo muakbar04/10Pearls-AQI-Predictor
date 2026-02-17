@@ -257,25 +257,33 @@ if fs and mr:
                     
         with tab3:
             st.markdown("### Feature Importance (SHAP)")
-            st.markdown("This chart explains which features are driving the **immediate next hour** of the forecast.")
+            st.markdown("This chart explains which features are driving the **immediate next hour** of the forecast compared to average historical conditions.")
             
             try:
-                # 1. Create feature names for the flattened 24-hour window
+                # 1. Create feature names for the flattened window
                 time_steps = input_width
                 flat_feature_names = [f"{col} (t-{time_steps-i}h)" for i in range(time_steps) for col in feature_cols]
                 
-                # 2. Extract the first hour's model from the MultiOutputRegressor
+                # 2. Extract the first hour's model
                 xgb_estimator = model.estimators_[0]
                 
-                # 3. Calculate SHAP values for the current input
-                explainer = shap.TreeExplainer(xgb_estimator)
-                shap_values = explainer.shap_values(X_scaled)
+                # --- THE FIX: Model-Agnostic SHAP ---
+                # Create a baseline of 0s. Since the data is StandardScaler'd, 
+                # 0 perfectly represents the "mean" or "average" historical conditions!
+                background_baseline = np.zeros((1, X_scaled.shape[1]))
                 
-                # --- FIX: Use Plotly to render the SHAP values ---
-                # Create a DataFrame to hold the feature names and their impact scores
+                # Pass the predict function instead of the model object to bypass the JSON bug
+                with st.spinner("Calculating SHAP values (this takes a few seconds)..."):
+                    explainer = shap.Explainer(xgb_estimator.predict, background_baseline)
+                    shap_explanation = explainer(X_scaled)
+                    
+                    # Extract the raw 1D array of values
+                    shap_vals = shap_explanation.values[0] 
+                
+                # 4. Create a DataFrame to hold the feature names and their impact scores
                 importance_df = pd.DataFrame({
                     'Feature': flat_feature_names,
-                    'SHAP Value': shap_values[0]
+                    'SHAP Value': shap_vals
                 })
                 
                 # Sort by absolute impact to find the top 15 most influential features
@@ -294,10 +302,10 @@ if fs and mr:
                     title="Top 15 Features Impacting the Next Hour"
                 )
                 
-                st.plotly_chart(fig_shap, use_container_width=True)
+                st.plotly_chart(fig_shap, width="stretch")
                 
             except Exception as e:
-                st.warning(f"Could not generate SHAP explanation: {e}")
+                st.error(f"Could not generate SHAP explanation: {e}")
 
         # Sidebar Meta
         st.sidebar.success(f"Model Loaded: {meta.get('last_trained')}")
