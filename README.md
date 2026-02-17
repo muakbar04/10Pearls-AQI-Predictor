@@ -2,7 +2,7 @@
 
 **Pearls AQI Predictor** is a 100% serverless, end-to-end machine learning pipeline that forecasts the PM2.5-based Air Quality Index (AQI) for Karachi, Pakistan, up to 72 hours in advance.
 
-This project automates the entire ML lifecycle—from real-time data ingestion and dynamic feature engineering to daily model retraining and interactive visualization—without the need to provision or manage dedicated servers.
+This project automates the entire ML lifecycle, from real-time data ingestion and dynamic feature engineering to daily model retraining and interactive visualization without the need to provision or manage dedicated servers.
 
 ### 🚀 Live Demo
 
