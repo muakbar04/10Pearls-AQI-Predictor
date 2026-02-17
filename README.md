@@ -35,12 +35,13 @@ The system operates on a decoupled, serverless architecture optimized for scalab
 
 ## 🛠️ Repository Structure
 
+* `eda.ipynb`: Exploratory Data Analysis notebook containing historical trend visualizations, feature correlation heatmaps, and seasonality insights for Karachi.
 * `fetch_features.py`: The data engineering pipeline. Fetches live/historical data, computes cyclical time encodings and rolling averages, and pushes updates to the Hopsworks Feature Store.
 * `train_model.py`: The training pipeline. Pulls the latest features, generates 24-hour lookback sequences, trains the XGBoost model for a 72-hour horizon, and registers the artifacts.
 * `app_streamlit.py`: The frontend dashboard. Pulls live data and the latest model artifacts to generate interactive forecasts and SHAP explainability charts.
 * `.github/workflows/`: Contains the CI/CD YAML files:
-* `hourly_features.yml`: Runs `fetch_features.py` every hour.
-* `daily_training.yml`: Runs `train_model.py` every night at midnight UTC.
+  * `hourly_features.yml`: Runs `fetch_features.py` every hour.
+  * `daily_training.yml`: Runs `train_model.py` every night at midnight UTC.
 
 
 
