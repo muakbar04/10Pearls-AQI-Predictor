@@ -65,7 +65,7 @@ To run this project on your local machine:
 **1. Clone the repository**
 
 ```bash
-git clone [https://github.com/muakbar04/10Pearls-AQI-Predictor.git](https://github.com/muakbar04/10Pearls-AQI-Predictor.git)
+git clone https://github.com/muakbar04/10Pearls-AQI-Predictor.git
 cd 10Pearls-AQI-Predictor
 
 ```
