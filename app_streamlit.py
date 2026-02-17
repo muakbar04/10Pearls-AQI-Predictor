@@ -273,12 +273,18 @@ if fs and mr:
                 background_baseline = np.zeros((1, X_scaled.shape[1]))
                 
                 # Pass the predict function instead of the model object to bypass the JSON bug
+                # Pass the predict function instead of the model object to bypass the JSON bug
                 with st.spinner("Calculating SHAP values (this takes a few seconds)..."):
                     explainer = shap.Explainer(xgb_estimator.predict, background_baseline)
-                    shap_explanation = explainer(X_scaled)
+                    
+                    # --- THE FIX: Dynamically calculate and override max_evals ---
+                    # SHAP requires at least 2 * num_features + 1. We add a buffer of 10 to be safe.
+                    required_evals = (X_scaled.shape[1] * 2) + 10
+                    
+                    shap_explanation = explainer(X_scaled, max_evals=required_evals)
                     
                     # Extract the raw 1D array of values
-                    shap_vals = shap_explanation.values[0] 
+                    shap_vals = shap_explanation.values[0]
                 
                 # 4. Create a DataFrame to hold the feature names and their impact scores
                 importance_df = pd.DataFrame({
