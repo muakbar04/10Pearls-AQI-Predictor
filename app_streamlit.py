@@ -10,10 +10,9 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import hopsworks
 
-# Page Config
 st.set_page_config(layout="wide", page_title="Karachi AQI Forecast (Serverless)")
 
-# --- 1. CONNECT TO HOPSWORKS (Cached) ---
+# 1. CONNECT TO HOPSWORKS (Cached)
 @st.cache_resource
 def get_hopsworks_resources():
     """Connects to Hopsworks and returns Feature Store & Model Registry"""
@@ -26,8 +25,8 @@ def get_hopsworks_resources():
         st.error(f"Could not connect to Hopsworks: {e}")
         return None, None
 
-# --- 2. FETCH DATA (Live from Cloud) ---
-@st.cache_data(ttl=300) # Cache for 5 minutes
+# 2. FETCH DATA (Live from Cloud)
+@st.cache_data(ttl=300)
 def load_batch_data(_fs):
     """Fetches input features from Feature Store"""
     try:
@@ -35,7 +34,6 @@ def load_batch_data(_fs):
         fg = _fs.get_feature_group(name="karachi_aqi", version=1)
         
         # Select all columns and read into Pandas
-        # (In a real app, you might only fetch the last 1000 rows to be faster)
         df = fg.select_all().read()
         
         df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -45,7 +43,7 @@ def load_batch_data(_fs):
         st.error(f"Error fetching data from Hopsworks: {e}")
         return None
 
-# --- 3. LOAD MODEL (Live from Registry) ---
+# 3. LOAD MODEL
 @st.cache_resource
 def load_serverless_model(_mr):
     """Downloads the BEST model and robustly finds artifacts"""
@@ -56,7 +54,6 @@ def load_serverless_model(_mr):
         # Download artifacts
         download_path = model_meta.download()
         
-        # --- ROBUST FILE FINDER ---
         # Hopsworks might nest files or flatten them. We search recursively.
         model_file = None
         scaler_file = None
@@ -88,7 +85,7 @@ def load_serverless_model(_mr):
         st.error(f"Error fetching model from Registry: {e}")
         return None, None, None
 
-# --- 4. PREPROCESSING HELPER (Must match Training Logic) ---
+# 4. PREPROCESSING HELPER
 def add_physics_features(df):
     df = df.copy()
     # Cyclical Time
@@ -102,7 +99,7 @@ def add_physics_features(df):
     
     return df.dropna().reset_index(drop=True)
 
-# --- UI HELPER ---
+# UI HELPER
 def get_aqi_color(aqi):
     if aqi <= 50: return "green", "Good"
     if aqi <= 100: return "#FDD835", "Moderate"
@@ -111,7 +108,7 @@ def get_aqi_color(aqi):
     if aqi <= 300: return "purple", "Very Unhealthy"
     return "#7e0023", "Hazardous"
 
-# --- MAIN APP LOGIC ---
+# MAIN APP LOGIC
 st.title("🌬️ Karachi AQI Forecast")
 st.markdown("Powered by **Hopsworks Feature Store** & **XGBoost**")
 st.markdown("---")
@@ -128,8 +125,7 @@ if fs and mr:
         # Preprocess Data (Add Physics Features)
         df = add_physics_features(df_raw)
 
-        # --- STEP 1: LOGIC (Filter in UTC) ---
-        # We do the math in UTC to safely handle the "Future Data" bug
+        # STEP 1: LOGIC (Filter in UTC)
         now_utc = datetime.now(pytz.utc)
 
         # Ensure timestamp is UTC-aware
@@ -141,14 +137,13 @@ if fs and mr:
         # Filter: Keep only past/present rows
         past_df = df[df['timestamp'] <= now_utc]
 
-        # --- STEP 2: DISPLAY (Convert to Karachi Time) ---
-        # This fixes the "8:06 AM" vs "1:06 PM" issue
+        # STEP 2: DISPLAY (Convert to Karachi Time)
         pk_tz = pytz.timezone('Asia/Karachi')
         
         # Convert the main dataframe
         df['timestamp'] = df['timestamp'].dt.tz_convert(pk_tz)
         
-        # Convert the filtered dataframe (make a copy to be safe)
+        # Convert the filtered dataframe
         if not past_df.empty:
             past_df = past_df.copy()
             past_df['timestamp'] = past_df['timestamp'].dt.tz_convert(pk_tz)
@@ -156,11 +151,11 @@ if fs and mr:
             latest = past_df.iloc[-1]
             prev = past_df.iloc[-2] if len(past_df) > 1 else latest
         else:
-            # Fallback (rare)
+            # Fallback
             latest = df.iloc[-1]
             prev = df.iloc[-2]
 
-        # --- TOP ROW: METRICS ---
+        # TOP ROW: METRICS
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Current PM2.5", f"{latest['pm25']:.1f}", f"{latest['pm25'] - prev['pm25']:.1f}")
@@ -174,7 +169,7 @@ if fs and mr:
         with col4:
             st.metric("Wind", f"{latest['wind_speed']} km/h")
 
-        # --- CHARTS ---
+        # CHARTS
         tab1, tab2 = st.tabs(["📈 History", "🤖 72h Forecast"])
 
         with tab1:
@@ -184,16 +179,14 @@ if fs and mr:
             st.plotly_chart(fig, use_container_width=True)
 
         with tab2:
-            # --- INFERENCE LOGIC ---
+            # INFERENCE LOGIC 
             input_width = meta.get('input_width', 24)
             feature_cols = meta.get('feature_cols', [])
             
-            # CHANGE 1: Use 'past_df' instead of 'df' to prevent looking into the future
             if len(past_df) < input_width:
                 st.error(f"Need at least {input_width} hours of data history.")
             else:
                 # 1. Prepare Input Vector
-                # We take the LAST 24 valid hours (ending now)
                 input_df = past_df.iloc[-input_width:]
                 
                 try:
@@ -211,7 +204,6 @@ if fs and mr:
                     # 4. Plot
                     fig_fc = go.Figure()
                     
-                    # CHANGE 2: Plot 'past_df' (clean history) instead of 'df' (dirty history)
                     past = past_df.tail(48)
                     fig_fc.add_trace(go.Scatter(x=past['timestamp'], y=past['aqi_pm25'], name="Past", line=dict(color='cyan')))
                     
@@ -226,7 +218,36 @@ if fs and mr:
                     
                     peak_aqi = max(pred_vector)
                     peak_date = future_dates[np.argmax(pred_vector)]
-                    st.info(f"Forecast Peak: **{int(peak_aqi)} AQI** on {peak_date.strftime('%A %H:%M')}")
+                    if peak_aqi >= 150:
+                        st.error(f"🚨 **ALERT:** Hazardous AQI Peak of **{int(peak_aqi)}** forecasted on {peak_date.strftime('%A at %I:%M %p')}! Please take precautions.")
+                    elif peak_aqi >= 100:
+                        st.warning(f"⚠️ **Warning:** AQI expected to reach **{int(peak_aqi)}** (Unhealthy for Sensitive Groups) on {peak_date.strftime('%A at %I:%M %p')}.")
+                    else:
+                        st.success(f"✅ **Forecast Peak:** {int(peak_aqi)} AQI on {peak_date.strftime('%A at %I:%M %p')}. Air quality looks good!")
+                        
+                    st.markdown("---")
+                    st.markdown("### 📅 Daily Average Forecast")
+                    
+                    # 1. Create a temp dataframe to easily group the 72 hours by calendar day
+                    df_future = pd.DataFrame({
+                        'Date': [d.date() for d in future_dates],
+                        'AQI': pred_vector
+                    })
+                    
+                    # 2. Group by the Date and calculate the mean AQI for each day
+                    daily_avg = df_future.groupby('Date')['AQI'].mean().reset_index()
+                    
+                    # 3. Display them nicely in side-by-side columns
+                    avg_cols = st.columns(len(daily_avg))
+                    for i, row in daily_avg.iterrows():
+                        with avg_cols[i]:
+                            day_str = row['Date'].strftime('%a, %b %d') # e.g., "Mon, Oct 28"
+                            avg_val = int(row['AQI'])
+                            color, label = get_aqi_color(avg_val) # Reuse your color helper!
+                            
+                            st.markdown(f"**{day_str}**")
+                            st.markdown(f"<h3 style='color:{color};'>{avg_val}</h3>", unsafe_allow_html=True)
+                            st.caption(label)
                     
                 except KeyError as e:
                     st.error(f"Feature Mismatch! {e}")
@@ -244,12 +265,10 @@ if fs and mr:
     else:
         st.warning("Waiting for data/model to load...")
 
-# --- REFRESH BUTTON (Serverless Trigger) ---
+# REFRESH BUTTON
 st.sidebar.markdown("---")
 if st.sidebar.button("🔄 Refresh Data"):
     st.toast("Fetching new data from source...")
-    # In a real deployed app, this button would trigger a GitHub Action via API.
-    # For local serverless dev, we run the script.
     import subprocess
     subprocess.run("python fetch_features.py", shell=True) 
     st.cache_data.clear()

@@ -1,11 +1,3 @@
-"""
-train_model.py
-SERVERLESS EDITION (Fixed):
- - Uses ephemeral /tmp storage.
- - BUNDLES all artifacts (model, scaler, meta) into one upload.
- - Auto-increments model version.
-"""
-
 import os
 import json
 import argparse
@@ -23,7 +15,7 @@ from xgboost import XGBRegressor
 from hsml.schema import Schema
 from hsml.model_schema import ModelSchema
 
-# --- FEATURE ENGINEERING ---
+# FEATURE ENGINEERING
 def add_physics_features(df):
     df = df.copy()
     df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
@@ -109,7 +101,7 @@ def main():
     xgb.fit(X_train_s, y_train)
     metrics = evaluate_model(y_test, xgb.predict(X_test_s), "XGBoost")
 
-    # 4. SERVERLESS UPLOAD (The Fix)
+    # 4. SERVERLESS UPLOAD
     with tempfile.TemporaryDirectory() as tmp_dir:
         print(f"\nCreated ephemeral workspace: {tmp_dir}")
         
@@ -148,8 +140,6 @@ def main():
             description="Serverless XGBoost 72h Forecast"
         )
         
-        # THE KEY FIX: Pass the DIRECTORY path, not individual files
-        # This uploads everything inside tmp_dir as a single Model Version
         print(f"Uploading artifacts from {tmp_dir}...")
         aqi_model.save(tmp_dir)
         

@@ -1,10 +1,3 @@
-"""
-fetch_features.py
-Fetches REAL historical data for Karachi using Open-Meteo (for training history)
-and Open-Meteo (for live dashboard updates).
-PUSHES DATA TO HOPSWORKS FEATURE STORE (Serverless).
-"""
-
 import argparse, os, json, requests
 import pandas as pd
 import numpy as np
@@ -182,7 +175,7 @@ def push_to_hopsworks(df):
     # 3. Insert Data
     print(f"Uploading {len(df)} rows to Feature Store...")
     # 'wait_for_job=True' is CRITICAL for preventing connection timeouts on local wifi
-    aqi_fg.insert(df, write_options={"wait_for_job" : True})
+    aqi_fg.insert(df, write_options={"wait_for_job" : False})
     print("✅ Upload successful!")
 
 def main():
@@ -217,8 +210,6 @@ def main():
 
     # 3. PUSH TO HOPSWORKS
     if not df.empty:
-        # --- FIX: Surgical Type Alignment (Crucial for Hopsworks Schema) ---
-        
         # 1. Decimals (Double/Float64)
         float_cols = ['temp', 'pm25', 'pm10', 'no2', 'o3', 'wind_speed', 
                       'pm25_change', 'aqi_change_rate', 'pm25_3h_mean', 'pm25_24h_mean']

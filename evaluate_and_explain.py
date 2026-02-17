@@ -1,9 +1,3 @@
-"""
-evaluate_and_explain.py
-Loads test set and trained Multi-Step Model.
-Plots forecast trajectories (Actual vs Predicted curves) and saves metrics.
-"""
-
 import os, joblib, json
 import pandas as pd, numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error
@@ -41,7 +35,7 @@ def main():
     feature_cols = meta['feature_cols']
     horizon = meta['horizon']
     
-    # Re-create sequences (Same logic as train_model.py)
+    # Re-create sequences
     X = []
     y = []
     for i in range(len(df)-horizon):
