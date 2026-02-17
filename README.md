@@ -6,7 +6,7 @@ This project automates the entire ML lifecycle—from real-time data ingestion a
 
 ### 🚀 Live Demo
 
-**Access the interactive dashboard here:** [Pearls AQI Predictor]()
+**Access the interactive dashboard here:** [Pearls AQI Predictor](https://10pearls-aqi-predictor-muakbar.streamlit.app/)
 
 ---
 
@@ -64,8 +64,8 @@ To run this project on your local machine:
 **1. Clone the repository**
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-cd YOUR_REPO_NAME
+git clone [https://github.com/muakbar04/10Pearls-AQI-Predictor.git](https://github.com/muakbar04/10Pearls-AQI-Predictor.git)
+cd 10Pearls-AQI-Predictor
 
 ```
 
