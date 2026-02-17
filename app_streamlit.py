@@ -271,19 +271,30 @@ if fs and mr:
                 explainer = shap.TreeExplainer(xgb_estimator)
                 shap_values = explainer.shap_values(X_scaled)
                 
-                # 4. Plot the local summary bar chart
-                fig, ax = plt.subplots(figsize=(10, 6))
+                # --- FIX: Use Plotly to render the SHAP values ---
+                # Create a DataFrame to hold the feature names and their impact scores
+                importance_df = pd.DataFrame({
+                    'Feature': flat_feature_names,
+                    'SHAP Value': shap_values[0]
+                })
                 
-                # shap_values[0] because X_scaled has shape (1, num_features)
-                shap.bar_plot(shap_values[0], feature_names=flat_feature_names, max_display=12, show=False)
+                # Sort by absolute impact to find the top 15 most influential features
+                importance_df['Abs Impact'] = importance_df['SHAP Value'].abs()
+                top_features = importance_df.sort_values(by='Abs Impact', ascending=True).tail(15)
                 
-                # Format the plot for Streamlit's dark theme
-                fig.patch.set_facecolor('none')
-                ax.set_facecolor('none')
-                ax.tick_params(colors='white')
-                ax.xaxis.label.set_color('white')
+                # Plot using Plotly Express
+                fig_shap = px.bar(
+                    top_features, 
+                    x='SHAP Value', 
+                    y='Feature', 
+                    orientation='h',
+                    color='SHAP Value',
+                    color_continuous_scale=px.colors.diverging.RdBu_r,
+                    template="plotly_dark",
+                    title="Top 15 Features Impacting the Next Hour"
+                )
                 
-                st.pyplot(fig)
+                st.plotly_chart(fig_shap, use_container_width=True)
                 
             except Exception as e:
                 st.warning(f"Could not generate SHAP explanation: {e}")
