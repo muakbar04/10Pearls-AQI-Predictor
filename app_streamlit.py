@@ -9,6 +9,8 @@ import pytz
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import hopsworks
+import shap
+import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide", page_title="Karachi AQI Forecast (Serverless)")
 
@@ -170,7 +172,7 @@ if fs and mr:
             st.metric("Wind", f"{latest['wind_speed']} km/h")
 
         # CHARTS
-        tab1, tab2 = st.tabs(["📈 History", "🤖 72h Forecast"])
+        tab1, tab2, tab3 = st.tabs(["📈 History", "🤖 72h Forecast", "🧠 Explainability"])
 
         with tab1:
             # Plot last 7 days (now in Karachi Time) using FILTERED data
@@ -252,6 +254,39 @@ if fs and mr:
                 except KeyError as e:
                     st.error(f"Feature Mismatch! {e}")
                     st.write("Available columns:", df.columns.tolist())
+                    
+        with tab3:
+            st.markdown("### Feature Importance (SHAP)")
+            st.markdown("This chart explains which features are driving the **immediate next hour** of the forecast.")
+            
+            try:
+                # 1. Create feature names for the flattened 24-hour window
+                time_steps = input_width
+                flat_feature_names = [f"{col} (t-{time_steps-i}h)" for i in range(time_steps) for col in feature_cols]
+                
+                # 2. Extract the first hour's model from the MultiOutputRegressor
+                xgb_estimator = model.estimators_[0]
+                
+                # 3. Calculate SHAP values for the current input
+                explainer = shap.TreeExplainer(xgb_estimator)
+                shap_values = explainer.shap_values(X_scaled)
+                
+                # 4. Plot the local summary bar chart
+                fig, ax = plt.subplots(figsize=(10, 6))
+                
+                # shap_values[0] because X_scaled has shape (1, num_features)
+                shap.bar_plot(shap_values[0], feature_names=flat_feature_names, max_display=12, show=False)
+                
+                # Format the plot for Streamlit's dark theme
+                fig.patch.set_facecolor('none')
+                ax.set_facecolor('none')
+                ax.tick_params(colors='white')
+                ax.xaxis.label.set_color('white')
+                
+                st.pyplot(fig)
+                
+            except Exception as e:
+                st.warning(f"Could not generate SHAP explanation: {e}")
 
         # Sidebar Meta
         st.sidebar.success(f"Model Loaded: {meta.get('last_trained')}")
