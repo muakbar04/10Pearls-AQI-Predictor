@@ -172,7 +172,7 @@ if fs and mr:
             st.metric("Wind", f"{latest['wind_speed']} km/h")
 
         # CHARTS
-        tab1, tab2, tab3 = st.tabs(["📈 History", "🤖 72h Forecast", "🧠 Explainability"])
+        tab1, tab2, tab3 = st.tabs(["📈 History", "📊 72h Forecast", "🧠 Explainability"])
 
         with tab1:
             # Plot last 7 days (now in Karachi Time) using FILTERED data
@@ -267,17 +267,11 @@ if fs and mr:
                 # 2. Extract the first hour's model
                 xgb_estimator = model.estimators_[0]
                 
-                # --- THE FIX: Model-Agnostic SHAP ---
-                # Create a baseline of 0s. Since the data is StandardScaler'd, 
-                # 0 perfectly represents the "mean" or "average" historical conditions!
                 background_baseline = np.zeros((1, X_scaled.shape[1]))
                 
-                # Pass the predict function instead of the model object to bypass the JSON bug
-                # Pass the predict function instead of the model object to bypass the JSON bug
                 with st.spinner("Calculating SHAP values (this takes a few seconds)..."):
                     explainer = shap.Explainer(xgb_estimator.predict, background_baseline)
                     
-                    # --- THE FIX: Dynamically calculate and override max_evals ---
                     # SHAP requires at least 2 * num_features + 1. We add a buffer of 10 to be safe.
                     required_evals = (X_scaled.shape[1] * 2) + 10
                     
