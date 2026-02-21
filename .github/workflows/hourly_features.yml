@@ -2,7 +2,7 @@ name: Hourly Feature Pipeline
 
 on:
   schedule:
-    - cron: '17 * * * *' # Runs at 17 minutes past the hour to avoid server congestion
+    - cron: '0 * * * *¹ # Every hour
   workflow_dispatch:
 
 jobs:
